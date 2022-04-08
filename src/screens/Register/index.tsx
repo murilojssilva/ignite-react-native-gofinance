@@ -1,17 +1,11 @@
 import React, { useState } from "react";
-
-import { Alert, Modal, TouchableWithoutFeedback, Keyboard } from "react-native";
-
+import { Modal, TouchableWithoutFeedback, Keyboard, Alert } from "react-native";
 import { Button } from "../../components/Form/Button";
-import { InputForm } from "../../components/Form/InputForm";
-
-import { CategorySelect } from "../CategorySelect";
-
-import uuid from "react-native-uuid";
-
+import Select from "../../components/Form/Select";
 import { TransactionTypeButton } from "../../components/Form/TransactionTypeButton";
-import { Select } from "../../components/Form/Select";
-
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import uuid from "react-native-uuid";
+import { useNavigation } from "@react-navigation/native";
 import {
   Container,
   Header,
@@ -20,8 +14,9 @@ import {
   Fields,
   TransactionTypes,
 } from "./styles";
+import { CategorySelect } from "../CategorySelect";
+import { InputForm } from "../../components/Form/InputForm";
 import { useForm } from "react-hook-form";
-
 import * as Yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 
@@ -30,11 +25,15 @@ interface FormData {
   amount: string;
 }
 
+type NavigationProps = {
+  navigate: (screen: string) => void;
+};
+
 const schema = Yup.object().shape({
   name: Yup.string().required("Nome é obrigatório"),
   amount: Yup.number()
-    .typeError("Informe um número")
-    .positive()
+    .typeError("Informe um valor numérico")
+    .positive("O valor não pode ser negativo")
     .required("O valor é obrigatório"),
 });
 
@@ -45,27 +44,36 @@ export function Register() {
     key: "category",
     name: "Categoria",
   });
+  const dataKey = "@gofinance:transactions";
+
+  const navigation = useNavigation<NavigationProps>();
 
   const {
     control,
     handleSubmit,
     formState: { errors },
-  } = useForm({
-    resolver: yupResolver(schema),
-  });
+    reset,
+  } = useForm({ resolver: yupResolver(schema) });
 
-  function handleTransactionTypeSelect(type: "up" | "down") {
+  const handleTransactionTypeSelect = (type: "positive" | "negative") => {
     setTransactionType(type);
-  }
+  };
 
   const handleCloseSelectCategory = () => {
     setCategoryModalOpen(false);
   };
 
-  async function handleRegister(form: FormData) {
-    if (!transactionType) return Alert.alert("Selecione o tipo da transação");
-    if (category.key === "category")
+  const handleOpenSelectCategory = () => {
+    setCategoryModalOpen(true);
+  };
+
+  const handleRegister = async (form: FormData) => {
+    if (!transactionType) {
+      return Alert.alert("Selecione o tipo de transação");
+    }
+    if (category.key === "category") {
       return Alert.alert("Selecione a categoria");
+    }
 
     const newTransaction = {
       id: String(uuid.v4()),
@@ -76,8 +84,26 @@ export function Register() {
       date: new Date(),
     };
 
-    console.log(newTransaction);
-  }
+    try {
+      const data = await AsyncStorage.getItem(dataKey);
+      const currentData = data ? JSON.parse(data) : [];
+
+      const dataFormatted = [...currentData, newTransaction];
+
+      await AsyncStorage.setItem(dataKey, JSON.stringify(dataFormatted));
+
+      reset();
+      setTransactionType("");
+      setCategory({
+        name: "Categoria",
+        key: "category",
+      });
+
+      navigation.navigate("Listagem");
+    } catch (error) {
+      Alert.alert("Não foi possível salvar");
+    }
+  };
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
@@ -103,25 +129,23 @@ export function Register() {
               keyboardType="numeric"
               error={errors.amount && errors.amount.message}
             />
+
             <TransactionTypes>
               <TransactionTypeButton
                 type="up"
                 title="Income"
-                onPress={() => handleTransactionTypeSelect("up")}
-                isActive={transactionType === "up"}
+                onPress={() => handleTransactionTypeSelect("positive")}
+                isActive={transactionType === "positive"}
               />
               <TransactionTypeButton
                 type="down"
                 title="Outcome"
-                onPress={() => handleTransactionTypeSelect("down")}
-                isActive={transactionType === "down"}
+                onPress={() => handleTransactionTypeSelect("negative")}
+                isActive={transactionType === "negative"}
               />
             </TransactionTypes>
 
-            <Select
-              title={category.name}
-              onPress={() => setCategoryModalOpen(true)}
-            />
+            <Select title={category.name} onPress={handleOpenSelectCategory} />
           </Fields>
 
           <Button title="Enviar" onPress={handleSubmit(handleRegister)} />

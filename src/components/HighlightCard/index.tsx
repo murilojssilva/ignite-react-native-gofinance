@@ -11,10 +11,10 @@ import {
 } from "./styles";
 
 interface Props {
+  type: "up" | "down" | "total";
   title: string;
   amount: string;
   lastTransaction: string;
-  type: "up" | "down" | "total";
 }
 
 const icon = {
